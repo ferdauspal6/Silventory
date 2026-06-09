@@ -223,3 +223,54 @@ export interface DashboardSummary {
   low_stock_count: number
   pending_transactions: number
 }
+
+export interface Sale {
+  id: string
+  sale_number: string
+  warehouse_id: string
+  cashier_id: string
+  sale_date: string
+  subtotal: number
+  discount_type: 'percent' | 'fixed' | ''
+  discount_value: number
+  discount_amount: number
+  total: number
+  notes: string
+  status: 'completed' | 'voided'
+  created_at: string
+  updated_at: string
+  details?: SaleDetail[]
+}
+
+export interface SaleDetail {
+  id: string
+  sale_id: string
+  item_id: string
+  quantity: number
+  price_at_sale: number
+  discount_type: 'percent' | 'fixed' | ''
+  discount_value: number
+  discount_amount: number
+  subtotal: number
+  created_at: string
+}
+
+export interface PosCartItem {
+  item_id: string
+  name: string
+  code: string
+  price: number
+  quantity: number
+  stock_available: number
+  discount_type: 'percent' | 'fixed' | ''
+  discount_value: number
+  discount_amount: number
+  subtotal: number
+}
+
+export interface DailySummary {
+  total_transactions: number
+  total_revenue: number
+  total_items_sold: number
+  voided_count: number
+}

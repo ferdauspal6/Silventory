@@ -93,3 +93,5 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from './tooltip'
+
+export { default as ComboboxWithCreate } from './ComboboxWithCreate.vue'

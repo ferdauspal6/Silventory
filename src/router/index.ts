@@ -9,6 +9,12 @@ const router = createRouter({
       component: () => import('@/pages/auth/Login.vue'),
     },
     {
+      path: '/pos',
+      name: 'pos',
+      component: () => import('@/views/pos/PosView.vue'),
+      meta: { requiresAuth: true, roles: ['manager', 'admin'] },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },

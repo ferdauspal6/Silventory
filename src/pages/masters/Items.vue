@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, reactive } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { apiService } from '@/lib/api'
 import { useFormDialog } from '@/composables/useFormDialog'
-import { Button, Input, Badge } from '@/components/ui'
-import { Loader2, Plus, Pencil, Trash2, Search, ListPlus } from '@lucide/vue'
+import { Button, Input, Badge, ComboboxWithCreate } from '@/components/ui'
+import { Loader2, Plus, Pencil, Trash2, Search } from '@lucide/vue'
 
 const items = ref<any[]>([])
 const categories = ref<any[]>([])
@@ -18,62 +18,24 @@ const dialog = useFormDialog({
   description: '', min_stock: 0,
 })
 
-// Quick-add state
-const quickAdd = reactive({
-  category: { open: false, submitting: false, name: '', description: '' },
-  brand: { open: false, submitting: false, name: '', description: '' },
-  unit: { open: false, submitting: false, name: '', abbreviation: '' },
-})
-
-async function quickAddCategory() {
-  quickAdd.category.submitting = true
-  try {
-    const res = await apiService.createCategory({ name: quickAdd.category.name, description: quickAdd.category.description })
-    if (res.success) {
-      const catRes = await apiService.getCategories()
-      if (catRes.success) categories.value = catRes.data as any[]
-      dialog.form.category_id = (res.data as any).id
-      quickAdd.category.open = false
-      quickAdd.category.name = ''
-      quickAdd.category.description = ''
-    }
-  } finally {
-    quickAdd.category.submitting = false
+async function onCreateCategory(name: string) {
+  const res = await apiService.createCategory({ name })
+  if (res.success) {
+    const catRes = await apiService.getCategories()
+    if (catRes.success) categories.value = catRes.data as any[]
+    return { id: (res.data as any).id, name: (res.data as any).name }
   }
+  throw new Error('Failed to create category')
 }
 
-async function quickAddBrand() {
-  quickAdd.brand.submitting = true
-  try {
-    const res = await apiService.createBrand({ name: quickAdd.brand.name, description: quickAdd.brand.description })
-    if (res.success) {
-      const brRes = await apiService.getBrands()
-      if (brRes.success) brands.value = brRes.data as any[]
-      dialog.form.brand_id = (res.data as any).id
-      quickAdd.brand.open = false
-      quickAdd.brand.name = ''
-      quickAdd.brand.description = ''
-    }
-  } finally {
-    quickAdd.brand.submitting = false
+async function onCreateBrand(name: string) {
+  const res = await apiService.createBrand({ name })
+  if (res.success) {
+    const brRes = await apiService.getBrands()
+    if (brRes.success) brands.value = brRes.data as any[]
+    return { id: (res.data as any).id, name: (res.data as any).name }
   }
-}
-
-async function quickAddUnit() {
-  quickAdd.unit.submitting = true
-  try {
-    const res = await apiService.createUnit({ name: quickAdd.unit.name, abbreviation: quickAdd.unit.abbreviation })
-    if (res.success) {
-      const unRes = await apiService.getUnits()
-      if (unRes.success) units.value = unRes.data as any[]
-      dialog.form.unit_id = (res.data as any).id
-      quickAdd.unit.open = false
-      quickAdd.unit.name = ''
-      quickAdd.unit.abbreviation = ''
-    }
-  } finally {
-    quickAdd.unit.submitting = false
-  }
+  throw new Error('Failed to create brand')
 }
 
 async function fetchData() {
@@ -224,48 +186,33 @@ async function handleDelete(id: string) {
             <div class="grid grid-cols-3 gap-4">
               <div class="space-y-2">
                 <label class="text-sm font-medium">Kategori</label>
-                <div class="flex gap-1">
-                  <select v-model="dialog.form.category_id" required
-                    class="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                    <option value="">Pilih Kategori</option>
-                    <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                  </select>
-                  <button type="button" @click="quickAdd.category.open = true"
-                    class="h-10 w-10 shrink-0 rounded-md border border-input bg-background flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-                    title="Tambah Kategori Baru">
-                    <ListPlus class="h-4 w-4" />
-                  </button>
-                </div>
+                <ComboboxWithCreate
+                  :modelValue="dialog.form.category_id"
+                  @update:modelValue="dialog.form.category_id = $event"
+                  :options="categories.map(c => ({ id: c.id, name: c.name }))"
+                  placeholder="Pilih Kategori"
+                  createLabel="Tambah Kategori"
+                  :onCreateNew="onCreateCategory"
+                />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Brand</label>
-                <div class="flex gap-1">
-                  <select v-model="dialog.form.brand_id" required
-                    class="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                    <option value="">Pilih Brand</option>
-                    <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                  </select>
-                  <button type="button" @click="quickAdd.brand.open = true"
-                    class="h-10 w-10 shrink-0 rounded-md border border-input bg-background flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-                    title="Tambah Brand Baru">
-                    <ListPlus class="h-4 w-4" />
-                  </button>
-                </div>
+                <ComboboxWithCreate
+                  :modelValue="dialog.form.brand_id"
+                  @update:modelValue="dialog.form.brand_id = $event"
+                  :options="brands.map(b => ({ id: b.id, name: b.name }))"
+                  placeholder="Pilih Brand"
+                  createLabel="Tambah Brand"
+                  :onCreateNew="onCreateBrand"
+                />
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">Satuan</label>
-                <div class="flex gap-1">
-                  <select v-model="dialog.form.unit_id" required
-                    class="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                    <option value="">Pilih Satuan</option>
-                    <option v-for="u in units" :key="u.id" :value="u.id">{{ u.abbreviation }} - {{ u.name }}</option>
-                  </select>
-                  <button type="button" @click="quickAdd.unit.open = true"
-                    class="h-10 w-10 shrink-0 rounded-md border border-input bg-background flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-                    title="Tambah Satuan Baru">
-                    <ListPlus class="h-4 w-4" />
-                  </button>
-                </div>
+                <select v-model="dialog.form.unit_id" required
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                  <option value="">Pilih Satuan</option>
+                  <option v-for="u in units" :key="u.id" :value="u.id">{{ u.abbreviation }} - {{ u.name }}</option>
+                </select>
               </div>
             </div>
             <div class="space-y-2">
@@ -287,79 +234,5 @@ async function handleDelete(id: string) {
       </div>
     </Teleport>
 
-    <!-- Quick-add Category -->
-    <Teleport to="body">
-      <div v-if="quickAdd.category.open" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="quickAdd.category.open = false">
-        <div class="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl mx-4">
-          <h3 class="text-base font-semibold mb-3">Tambah Kategori Baru</h3>
-          <form @submit.prevent="quickAddCategory" class="space-y-3">
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Nama</label>
-              <Input v-model="quickAdd.category.name" placeholder="Nama kategori" required />
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Deskripsi</label>
-              <Input v-model="quickAdd.category.description" placeholder="Opsional" />
-            </div>
-            <div class="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" size="sm" @click="quickAdd.category.open = false">Batal</Button>
-              <Button type="submit" size="sm" :disabled="quickAdd.category.submitting">
-                <Loader2 v-if="quickAdd.category.submitting" class="mr-1 h-3 w-3 animate-spin" /> Simpan
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
-
-    <!-- Quick-add Brand -->
-    <Teleport to="body">
-      <div v-if="quickAdd.brand.open" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="quickAdd.brand.open = false">
-        <div class="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl mx-4">
-          <h3 class="text-base font-semibold mb-3">Tambah Brand Baru</h3>
-          <form @submit.prevent="quickAddBrand" class="space-y-3">
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Nama</label>
-              <Input v-model="quickAdd.brand.name" placeholder="Nama brand" required />
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Deskripsi</label>
-              <Input v-model="quickAdd.brand.description" placeholder="Opsional" />
-            </div>
-            <div class="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" size="sm" @click="quickAdd.brand.open = false">Batal</Button>
-              <Button type="submit" size="sm" :disabled="quickAdd.brand.submitting">
-                <Loader2 v-if="quickAdd.brand.submitting" class="mr-1 h-3 w-3 animate-spin" /> Simpan
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
-
-    <!-- Quick-add Unit -->
-    <Teleport to="body">
-      <div v-if="quickAdd.unit.open" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="quickAdd.unit.open = false">
-        <div class="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl mx-4">
-          <h3 class="text-base font-semibold mb-3">Tambah Satuan Baru</h3>
-          <form @submit.prevent="quickAddUnit" class="space-y-3">
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Nama</label>
-              <Input v-model="quickAdd.unit.name" placeholder="pcs, kg, liter, box" required />
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Singkatan</label>
-              <Input v-model="quickAdd.unit.abbreviation" placeholder="pcs, kg, L" required />
-            </div>
-            <div class="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" size="sm" @click="quickAdd.unit.open = false">Batal</Button>
-              <Button type="submit" size="sm" :disabled="quickAdd.unit.submitting">
-                <Loader2 v-if="quickAdd.unit.submitting" class="mr-1 h-3 w-3 animate-spin" /> Simpan
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>

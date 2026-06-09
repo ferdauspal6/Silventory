@@ -25,7 +25,9 @@ const SHEETS = {
   STOCK_OPNAME_DETAILS: "stock_opname_details",
   STOCK_USAGES: "stock_usages",
   STOCK_USAGE_DETAILS: "stock_usage_details",
-  ACTIVITY_LOG: "activity_log"
+  ACTIVITY_LOG: "activity_log",
+  SALES: "sales",
+  SALE_DETAILS: "sale_details"
 };
 
 const HEADERS = {
@@ -33,7 +35,7 @@ const HEADERS = {
   categories: ["id","name","description","is_active","created_at","updated_at"],
   brands: ["id","name","description","is_active","created_at","updated_at"],
   units: ["id","name","abbreviation","is_active","created_at","updated_at"],
-  items: ["id","code","name","category_id","brand_id","unit_id","description","min_stock","is_active","created_at","updated_at"],
+  items: ["id","code","name","category_id","brand_id","unit_id","description","min_stock","price","is_active","created_at","updated_at"],
   suppliers: ["id","code","name","contact_person","phone","email","address","is_active","created_at","updated_at"],
   warehouses: ["id","code","name","type","location","person_in_charge","is_active","created_at","updated_at"],
   stock: ["id","item_id","warehouse_id","quantity","updated_at"],
@@ -47,7 +49,9 @@ const HEADERS = {
   stock_opname_details: ["id","opname_id","item_id","quantity_system","quantity_actual","difference","notes"],
   stock_usages: ["id","usage_number","project_id","input_type","recorded_by","usage_date","notes","status","created_at","updated_at"],
   stock_usage_details: ["id","usage_id","item_id","quantity_before","quantity_input","quantity_used","quantity_remaining","notes"],
-  activity_log: ["id","timestamp","user_id","action","module","record_id","description","payload"]
+  activity_log: ["id","timestamp","user_id","action","module","record_id","description","payload"],
+  sales: ["id","sale_number","warehouse_id","cashier_id","sale_date","subtotal","discount_type","discount_value","discount_amount","total","notes","status","created_at","updated_at"],
+  sale_details: ["id","sale_id","item_id","quantity","price_at_sale","discount_type","discount_value","discount_amount","subtotal","created_at"]
 };
 
 // ============================================================
@@ -104,8 +108,8 @@ function dispatch(action, p, method) {
     // Items
     "getItems": () => getItems(p),
     "getItemById": () => getById(SHEETS.ITEMS, p.id),
-    "createItem": () => createRecord(SHEETS.ITEMS, p),
-    "updateItem": () => updateRecord(SHEETS.ITEMS, p),
+    "createItem": () => createItem(p),
+    "updateItem": () => updateItem(p),
     "deleteItem": () => softDelete(SHEETS.ITEMS, p.id),
     // Suppliers
     "getSuppliers": () => getAll(SHEETS.SUPPLIERS, p),
@@ -168,6 +172,12 @@ function dispatch(action, p, method) {
     "createUser": () => createUser(p),
     "updateUser": () => updateRecord(SHEETS.USERS, p),
     "deactivateUser": () => softDelete(SHEETS.USERS, p.id),
+    // POS / Sales
+    "getSales": () => getSales(p),
+    "getSaleById": () => getSaleById(p.id),
+    "createSale": () => createSale(p),
+    "voidSale": () => voidSale(p),
+    "getDailySummary": () => getDailySummary(p),
   };
 
   if (!routes[action]) return respond(false, null, "Unknown action: " + action, 404);
@@ -419,6 +429,38 @@ function getItems(p) {
     data = data.filter(r => r.is_active == val);
   }
   return respond(true, data);
+}
+
+function createItem(p) {
+  const now = getTimestamp();
+  const record = {
+    id: generateId(),
+    code: p.code,
+    name: p.name,
+    category_id: p.category_id || "",
+    brand_id: p.brand_id || "",
+    unit_id: p.unit_id || "",
+    description: p.description || "",
+    min_stock: p.min_stock !== undefined ? Number(p.min_stock) : 0,
+    price: p.price !== undefined ? Number(p.price) : 0,
+    is_active: true,
+    created_at: now,
+    updated_at: now
+  };
+  appendToSheet(SHEETS.ITEMS, record);
+  return respond(true, record, "Item created");
+}
+
+function updateItem(p) {
+  const { id, ...updates } = p;
+  if (!id) return respond(false, null, "ID required", 400);
+  if (updates.price !== undefined) updates.price = Number(updates.price);
+  if (updates.min_stock !== undefined) updates.min_stock = Number(updates.min_stock);
+  updates.updated_at = getTimestamp();
+  delete updates.action;
+  const found = updateRowById(SHEETS.ITEMS, id, updates);
+  if (!found) return respond(false, null, "Record not found", 404);
+  return respond(true, { id, ...updates }, "Updated successfully");
 }
 
 // ============================================================
@@ -930,4 +972,146 @@ function createUser(p) {
   appendToSheet(SHEETS.USERS, record);
   const { password_hash, ...safeRecord } = record;
   return respond(true, safeRecord, "User created");
+}
+
+// ============================================================
+// POS / SALES
+// ============================================================
+
+function getSales(p) {
+  let data = getSheetData(SHEETS.SALES);
+  if (p.warehouse_id) data = data.filter(r => r.warehouse_id === p.warehouse_id);
+  if (p.status) data = data.filter(r => r.status === p.status);
+  if (p.cashier_id) data = data.filter(r => r.cashier_id === p.cashier_id);
+  return respond(true, data);
+}
+
+function getSaleById(id) {
+  const record = findById(SHEETS.SALES, id);
+  if (!record) return respond(false, null, "Not found", 404);
+  const details = getSheetData(SHEETS.SALE_DETAILS).filter(d => d.sale_id === id);
+  return respond(true, { ...record, details });
+}
+
+function createSale(p) {
+  // Validate stock for each item
+  (p.details || []).forEach(d => {
+    const available = getStockQty(d.item_id, p.warehouse_id);
+    if (available < Number(d.quantity)) {
+      throw new Error(`Insufficient stock for item ${d.item_id}. Available: ${available}, Requested: ${d.quantity}`);
+    }
+  });
+
+  const now = getTimestamp();
+  const saleId = generateId();
+  const saleNum = generateNumber("SAL", SHEETS.SALES);
+
+  // Calculate per-item subtotals
+  const details = (p.details || []).map(d => {
+    const priceAtSale = Number(d.price_at_sale);
+    const quantity = Number(d.quantity);
+    const discType = d.discount_type || "";
+    const discValue = Number(d.discount_value || 0);
+    let discAmount = 0;
+    if (discType === "percent") {
+      discAmount = (priceAtSale * quantity) * (discValue / 100);
+    } else if (discType === "fixed") {
+      discAmount = discValue;
+    }
+    const subtotal = (priceAtSale * quantity) - discAmount;
+    return {
+      id: generateId(),
+      sale_id: saleId,
+      item_id: d.item_id,
+      quantity: quantity,
+      price_at_sale: priceAtSale,
+      discount_type: discType,
+      discount_value: discValue,
+      discount_amount: discAmount,
+      subtotal: Math.max(0, subtotal),
+      created_at: now
+    };
+  });
+
+  // Calculate totals
+  const subtotal = details.reduce((sum, d) => sum + d.subtotal, 0);
+  const globalDiscType = p.discount_type || "";
+  const globalDiscValue = Number(p.discount_value || 0);
+  let globalDiscAmount = 0;
+  if (globalDiscType === "percent") {
+    globalDiscAmount = subtotal * (globalDiscValue / 100);
+  } else if (globalDiscType === "fixed") {
+    globalDiscAmount = globalDiscValue;
+  }
+  const total = Math.max(0, subtotal - globalDiscAmount);
+
+  // Create sale record
+  const saleRecord = {
+    id: saleId,
+    sale_number: saleNum,
+    warehouse_id: p.warehouse_id,
+    cashier_id: p.cashier_id || "",
+    sale_date: p.sale_date || now,
+    subtotal: subtotal,
+    discount_type: globalDiscType,
+    discount_value: globalDiscValue,
+    discount_amount: globalDiscAmount,
+    total: total,
+    notes: p.notes || "",
+    status: "completed",
+    created_at: now,
+    updated_at: now
+  };
+  appendToSheet(SHEETS.SALES, saleRecord);
+
+  // Insert details & deduct stock
+  details.forEach(d => {
+    appendToSheet(SHEETS.SALE_DETAILS, d);
+    updateStock(d.item_id, p.warehouse_id, -d.quantity);
+  });
+
+  logActivity(p.cashier_id, "CREATE", "sales", saleId, `Sale ${saleNum} completed`);
+  return respond(true, { ...saleRecord, details }, "Sale completed");
+}
+
+function voidSale(p) {
+  const record = findById(SHEETS.SALES, p.id);
+  if (!record) return respond(false, null, "Not found", 404);
+  if (record.status === "voided") return respond(false, null, "Already voided", 400);
+
+  // Restore stock
+  const details = getSheetData(SHEETS.SALE_DETAILS).filter(d => d.sale_id === p.id);
+  details.forEach(d => {
+    updateStock(d.item_id, record.warehouse_id, Number(d.quantity));
+  });
+
+  updateRowById(SHEETS.SALES, p.id, { status: "voided", updated_at: getTimestamp() });
+  logActivity(p.user_id, "VOID", "sales", p.id, `Sale ${record.sale_number} voided, stock restored`);
+  return respond(true, { id: p.id, status: "voided" }, "Sale voided, stock restored");
+}
+
+function getDailySummary(p) {
+  const date = p.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const sales = getSheetData(SHEETS.SALES);
+  const filtered = sales.filter(s => {
+    const saleDate = s.sale_date ? s.sale_date.substring(0, 10) : "";
+    if (saleDate !== date) return false;
+    if (p.warehouse_id && s.warehouse_id !== p.warehouse_id) return false;
+    return true;
+  });
+
+  const completed = filtered.filter(s => s.status === "completed");
+  const voidedCount = filtered.filter(s => s.status === "voided").length;
+
+  const totalItemsSold = completed.reduce((sum, s) => {
+    const details = getSheetData(SHEETS.SALE_DETAILS).filter(d => d.sale_id === s.id);
+    return sum + details.reduce((s2, d) => s2 + Number(d.quantity), 0);
+  }, 0);
+
+  return respond(true, {
+    total_transactions: completed.length,
+    total_revenue: completed.reduce((sum, s) => sum + Number(s.total), 0),
+    total_items_sold: totalItemsSold,
+    voided_count: voidedCount
+  });
 }

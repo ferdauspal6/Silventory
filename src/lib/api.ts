@@ -69,9 +69,9 @@ export const apiService = {
   getItems: (category_id?: string, is_active?: string) =>
     get<Record<string, any>[]>({ action: 'getItems', category_id: category_id || '', is_active: is_active || '' }),
   getItemById: (id: string) => get<Record<string, any>>({ action: 'getItemById', id }),
-  createItem: (data: { code: string; name: string; category_id: string; brand_id: string; unit_id: string; min_stock?: number; description?: string }) =>
+  createItem: (data: { code: string; name: string; category_id: string; brand_id: string; unit_id: string; min_stock?: number; price?: number; description?: string }) =>
     post<Record<string, any>>({ action: 'createItem', ...data }),
-  updateItem: (data: { id: string; code?: string; name?: string; category_id?: string; brand_id?: string; unit_id?: string; min_stock?: number; description?: string; is_active?: boolean }) =>
+  updateItem: (data: { id: string; code?: string; name?: string; category_id?: string; brand_id?: string; unit_id?: string; min_stock?: number; price?: number; description?: string; is_active?: boolean }) =>
     post<Record<string, any>>({ action: 'updateItem', ...data }),
   deleteItem: (id: string) => post<Record<string, any>>({ action: 'deleteItem', id }),
 
@@ -161,6 +161,16 @@ export const apiService = {
   getDashboardSummary: () => get<Record<string, any>>({ action: 'getDashboardSummary' }),
   getStockByWarehouse: (warehouse_id: string) => get<Record<string, any>[]>({ action: 'getStockByWarehouse', warehouse_id }),
   getRecentActivity: (limit?: number) => get<Record<string, any>[]>({ action: 'getRecentActivity', limit: limit || 10 }),
+
+  // POS / Sales
+  getSales: (warehouse_id?: string, status?: string) =>
+    get<Record<string, any>[]>({ action: 'getSales', warehouse_id: warehouse_id || '', status: status || '' }),
+  getSaleById: (id: string) => get<Record<string, any>>({ action: 'getSaleById', id }),
+  createSale: (data: { warehouse_id: string; cashier_id?: string; sale_date?: string; notes?: string; discount_type?: string; discount_value?: number; details: { item_id: string; quantity: number; price_at_sale: number; discount_type?: string; discount_value?: number }[] }) =>
+    post<Record<string, any>>({ action: 'createSale', ...data }),
+  voidSale: (id: string, user_id?: string) => post<Record<string, any>>({ action: 'voidSale', id, user_id: user_id || '' }),
+  getDailySummary: (date?: string, warehouse_id?: string) =>
+    get<Record<string, any>>({ action: 'getDailySummary', date: date || '', warehouse_id: warehouse_id || '' }),
 
   // Users (Manager only)
   getUsers: () => get<Record<string, any>[]>({ action: 'getUsers' }),

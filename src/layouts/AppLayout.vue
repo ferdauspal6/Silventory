@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ChevronDown,
   List,
+  ShoppingCart,
 } from '@lucide/vue'
 import { Button } from '@/components/ui'
 
@@ -36,16 +37,19 @@ const expandedMenus = ref<Record<string, boolean>>({
 })
 
 interface NavItem {
-  label: string
-  icon: any
+  label?: string
+  icon?: any
   route?: string
   key?: string
   children?: { label: string; route: string }[]
+  type?: 'separator' | 'item'
 }
 
 const navItems = computed<NavItem[]>(() => {
   const items: NavItem[] = [
     { label: 'Dashboard', icon: Gauge, route: '/dashboard' },
+    { label: 'Kasir / POS', icon: ShoppingCart, route: '/pos' },
+    { type: 'separator' } as NavItem,
     {
       label: 'Master Data',
       icon: Box,
@@ -168,8 +172,9 @@ setInterval(() => {
         </div>
       </div>
       <nav class="p-3 space-y-1">
-        <template v-for="item in navItems" :key="item.label">
-          <div v-if="item.children">
+        <template v-for="item in navItems" :key="item.label || item.type">
+          <hr v-if="item.type === 'separator'" class="my-2 border-gray-200" />
+          <div v-else-if="item.children">
             <button
               @click="toggleMenu(item.key!)"
               class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -224,8 +229,9 @@ setInterval(() => {
         </div>
       </div>
       <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        <template v-for="item in navItems" :key="item.label">
-          <div v-if="item.children">
+        <template v-for="item in navItems" :key="item.label || item.type">
+          <hr v-if="item.type === 'separator'" class="my-2 border-white/10" />
+          <div v-else-if="item.children">
             <button
               @click="toggleMenu(item.key!)"
               class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
